@@ -1,0 +1,14 @@
+/* minimal reset + simple layout */
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, 'Helvetica Neue', Arial;
+  background: #f7fafc;
+  color: #0f172a;
+}
+.container {
+  max-width: 640px;
+  margin: 40px auto;
+  padding: 16px;
+}
+button { cursor: pointer; }
+input, button { font: inherit; }
