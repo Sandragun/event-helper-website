@@ -47,13 +47,6 @@ export function CertificateManager() {
     }
   }
 
-  // Fetch participants when event is selected
-  useEffect(() => {
-    if (selectedEvent) {
-      fetchParticipants();
-    }
-  }, [selectedEvent, fetchParticipants]);
-
   const fetchParticipants = useCallback(async () => {
     if (!selectedEvent) return;
 
@@ -99,6 +92,12 @@ export function CertificateManager() {
       alert('Error fetching participants: ' + err.message);
     }
   }, [selectedEvent]);
+
+  useEffect(() => {
+    if (selectedEvent) {
+      fetchParticipants();
+    }
+  }, [selectedEvent, fetchParticipants]);
 
   async function generateCertificates() {
     if (!templateFile || participants.length === 0) {

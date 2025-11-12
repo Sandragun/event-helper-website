@@ -56,18 +56,6 @@ export default function Chatbot({ onClose, events = [] }) {
     return FIELD_PROMPTS[field] || `Please provide your ${FIELD_LABELS[field] || 'details'}.`;
   }
 
-  useEffect(() => {
-    fetchUserInfo();
-  }, [fetchUserInfo]);
-
-  useEffect(() => {
-    postEventsList();
-  }, [postEventsList]);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   const fetchUserInfo = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -115,6 +103,18 @@ export default function Chatbot({ onClose, events = [] }) {
       }
     ]);
   }, [events]);
+
+  useEffect(() => {
+    fetchUserInfo();
+  }, [fetchUserInfo]);
+
+  useEffect(() => {
+    postEventsList();
+  }, [postEventsList]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   function handleSelectEvent(eventId, infoOverride) {
     setSelectedEventId(eventId);
