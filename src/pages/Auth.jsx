@@ -7,6 +7,7 @@ export default function Auth() {
   const [isAdminFlow, setIsAdminFlow] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -66,89 +67,121 @@ export default function Auth() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: 520 }}>
-      <div style={{ background: '#fff', padding: 24, borderRadius: 8, boxShadow: '0 6px 18px rgba(2,6,23,0.08)' }}>
-        <h2 style={{ marginTop: 0 }}>Event Helper — {isLogin ? 'Sign In' : 'Sign Up'}</h2>
+    <div className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div className="card" style={{ maxWidth: 520, width: '100%' }}>
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
+          <div className="brand-badge">🎫</div>
+          <h2 style={{ marginTop: 0, marginBottom: 8, fontSize: 24, fontWeight: 700 }}>Event Helper</h2>
+          <p style={{ color: '#a0a0b0', margin: 0 }}>{isLogin ? 'Welcome back' : 'Create your account'}</p>
+        </div>
 
-        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
           <button
             onClick={() => setIsAdminFlow(false)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 6,
-              border: '1px solid #e2e8f0',
-              background: !isAdminFlow ? '#2563eb' : '#fff',
-              color: !isAdminFlow ? '#fff' : '#111'
-            }}
+            className={`btn ${!isAdminFlow ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ flex: 1 }}
           >
-            User
+            👤 User
           </button>
           <button
             onClick={() => setIsAdminFlow(true)}
-            style={{
-              padding: '8px 12px',
-              borderRadius: 6,
-              border: '1px solid #e2e8f0',
-              background: isAdminFlow ? '#7c3aed' : '#fff',
-              color: isAdminFlow ? '#fff' : '#111'
-            }}
+            className={`btn ${isAdminFlow ? 'btn-primary' : 'btn-secondary'}`}
+            style={{ flex: 1 }}
           >
-            Admin
-          </button>
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <button
-            onClick={() => { setIsLogin(!isLogin); setMessage(null); }}
-            style={{ background: 'none', border: 'none', color: '#2563eb', textDecoration: 'underline', cursor: 'pointer' }}
-          >
-            {isLogin ? 'Need to create an account? Sign up' : 'Already have an account? Sign in'}
+            🔐 Admin
           </button>
         </div>
 
         <form onSubmit={isLogin ? handleLogin : handleRegister}>
           {!isLogin && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ display: 'block', fontSize: 13 }}>Full name</label>
-              <input value={name} onChange={e => setName(e.target.value)} required style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }} />
+            <div className="form-group input-with-icon">
+              <label>Full Name</label>
+              <span className="input-icon">👤</span>
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="John Doe"
+                required
+              />
             </div>
           )}
 
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 13 }}>Email</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} required style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }} />
+          <div className="form-group input-with-icon">
+            <label>Email Address</label>
+            <span className="input-icon">✉️</span>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
+            />
+            <div style={{ fontSize: 12, color: '#a0a0b0' }}>Use your college or work email</div>
           </div>
 
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ display: 'block', fontSize: 13 }}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} required style={{ width: '100%', padding: 8, borderRadius: 6, border: '1px solid #e2e8f0' }} />
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button type="submit" disabled={loading} style={{ padding: '8px 16px', borderRadius: 6, background: '#10b981', color: '#fff', border: 'none' }}>
-              {loading ? 'Please wait...' : (isLogin ? 'Sign In' : 'Sign Up')}
+          <div className="form-group input-with-icon">
+            <label>Password</label>
+            <span className="input-icon">🔒</span>
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
+            <button
+              type="button"
+              className="input-action"
+              onClick={() => setShowPassword(v => !v)}
+              aria-label="Toggle password visibility"
+            >
+              {showPassword ? '🙈' : '👁️'}
             </button>
-
-            {isLogin && (
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.preventDefault();
-                  setMessage('If that email exists, a magic link was sent.');
-                  await supabase.auth.signInWithOtp({ email });
-                }}
-                style={{ background: 'none', border: 'none', color: '#2563eb', textDecoration: 'underline', cursor: 'pointer' }}
-              >
-                Send magic link
-              </button>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+              <a href="#" className="muted-link">Forgot password?</a>
+              <span style={{ fontSize: 12, color: '#a0a0b0' }}>Min 8 characters</span>
+            </div>
           </div>
 
-          {message && <div style={{ marginTop: 12, color: 'crimson' }}>{message}</div>}
+          <button type="submit" disabled={loading} className="btn btn-primary" style={{ width: '100%', marginBottom: 12 }}>
+            {loading ? '⏳ Processing...' : (isLogin ? '🔓 Sign In' : '📝 Sign Up')}
+          </button>
+
+          {isLogin && (
+            <button
+              type="button"
+              onClick={async (e) => {
+                e.preventDefault();
+                setMessage('✨ If that email exists, a magic link was sent.');
+                await supabase.auth.signInWithOtp({ email });
+              }}
+              className="btn btn-secondary"
+              style={{ width: '100%' }}
+            >
+              ✉️ Send Magic Link
+            </button>
+          )}
         </form>
 
-        <div style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
-          Note: Admin accounts must be created/assigned by an admin in the database.
+        <div style={{ textAlign: 'center', marginTop: 20, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+          <button
+            onClick={() => { setIsLogin(!isLogin); setMessage(null); }}
+            className="btn btn-secondary"
+            style={{ width: '100%' }}
+          >
+            {isLogin ? '✏️ Need an account? Sign up' : '🔑 Already have an account? Sign in'}
+          </button>
+        </div>
+
+        {message && (
+          <div className="alert alert-info" style={{ marginTop: 16 }}>
+            {message}
+          </div>
+        )}
+
+        <div style={{ marginTop: 16, fontSize: 12, color: '#a0a0b0', textAlign: 'center' }}>
+          💡 Admin accounts must be created/assigned by an admin in the database.
         </div>
       </div>
     </div>

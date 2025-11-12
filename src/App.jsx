@@ -9,7 +9,7 @@ import { supabase } from './supabaseClient';
 
 export default function App() {
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       console.log('Auth event', event);
     });
     return () => {

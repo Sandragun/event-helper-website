@@ -46,72 +46,64 @@ export default function Events() {
 
   return (
     <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ margin: 0 }}>Upcoming Events</h1>
+      {/* Header */}
+      <div className="header">
         <div>
-          <Link to="/auth" style={{ marginRight: '12px', color: '#2563eb', textDecoration: 'none' }}>
-            Login
+          <h1 style={{ marginBottom: 4 }}>🎪 Upcoming Events</h1>
+          <p style={{ margin: 0, color: '#a0a0b0', fontSize: 14 }}>Discover and register for exciting events</p>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <Link to="/auth" className="btn btn-primary">
+            🔑 Sign In
           </Link>
-          <Link to="/auth" style={{ color: '#2563eb', textDecoration: 'none' }}>
-            Register
+          <Link to="/auth" className="btn btn-success">
+            📝 Register
           </Link>
         </div>
       </div>
 
-      {events.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '8px' }}>
-          <p>No events available at the moment.</p>
+      {loading ? (
+        <div className="grid-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="card skeleton" style={{ height: 300 }} />
+          ))}
+        </div>
+      ) : events.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: 60 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
+          <h3 style={{ marginBottom: 8 }}>No Events Available</h3>
+          <p style={{ color: '#a0a0b0', margin: 0 }}>Check back soon for upcoming events!</p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: '20px' }}>
+        <div className="grid-3">
           {events.map((event) => (
-            <div
-              key={event.id}
-              style={{
-                background: '#fff',
-                padding: '24px',
-                borderRadius: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                display: 'grid',
-                gridTemplateColumns: event.poster_url ? '200px 1fr' : '1fr',
-                gap: '20px'
-              }}
-            >
-              {event.poster_url && (
+            <div key={event.id} className="card fade-in" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              {event.poster_url ? (
                 <img
                   src={event.poster_url}
                   alt={event.title}
-                  style={{
-                    width: '100%',
-                    height: '200px',
-                    objectFit: 'cover',
-                    borderRadius: '8px'
-                  }}
+                  className="img-banner"
                 />
+              ) : (
+                <div className="banner-placeholder">🎪</div>
               )}
-              <div>
-                <h2 style={{ marginTop: 0, marginBottom: '12px' }}>{event.title}</h2>
-                <p style={{ color: '#64748b', marginBottom: '16px' }}>{event.description}</p>
-                {event.support_contact && (
-                  <p style={{ marginBottom: '16px' }}>
-                    <strong>Contact:</strong> {event.support_contact}
-                  </p>
-                )}
-                <Link
-                  to="/auth"
-                  style={{
-                    display: 'inline-block',
-                    padding: '10px 20px',
-                    background: '#2563eb',
-                    color: '#fff',
-                    textDecoration: 'none',
-                    borderRadius: '6px',
-                    marginTop: '12px'
-                  }}
-                >
-                  Register Now
-                </Link>
-              </div>
+              
+              <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 18, fontWeight: 700 }}>{event.title}</h3>
+              <p style={{ color: '#a0a0b0', marginBottom: 12, fontSize: 14, flex: 1 }}>{event.description}</p>
+              
+              {event.support_contact && (
+                <div style={{ marginBottom: 12, padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, fontSize: 13 }}>
+                  <strong style={{ color: '#60a5fa' }}>📞 Contact:</strong> <span style={{ color: '#e0e0e0' }}>{event.support_contact}</span>
+                </div>
+              )}
+              
+              <Link
+                to="/auth"
+                className="btn btn-primary btn-block"
+                style={{ marginTop: 'auto' }}
+              >
+                ✨ Register Now
+              </Link>
             </div>
           ))}
         </div>

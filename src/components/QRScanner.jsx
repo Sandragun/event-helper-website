@@ -3,9 +3,6 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { supabase } from '../supabaseClient';
 
 export default function QRScanner({ onClose }) {
-  const scannerRef = useRef(null);
-  const [scanning, setScanning] = useState(false);
-  const [scannedData, setScannedData] = useState(null);
   const [participantInfo, setParticipantInfo] = useState(null);
   const [error, setError] = useState(null);
   const html5QrCodeRef = useRef(null);
@@ -19,7 +16,6 @@ export default function QRScanner({ onClose }) {
 
   async function startScanning() {
     try {
-      setScanning(true);
       setError(null);
       const html5QrCode = new Html5Qrcode('qr-reader');
       html5QrCodeRef.current = html5QrCode;
@@ -36,7 +32,6 @@ export default function QRScanner({ onClose }) {
     } catch (err) {
       console.error('Error starting scanner:', err);
       setError('Failed to start camera. Please check permissions.');
-      setScanning(false);
     }
   }
 
@@ -50,16 +45,11 @@ export default function QRScanner({ onClose }) {
     } catch (err) {
       console.error('Error stopping scanner:', err);
     }
-    setScanning(false);
   }
 
   async function onScanSuccess(decodedText) {
     try {
-      setScannedData(decodedText);
       await stopScanning();
-
-      // Parse QR code data
-      const qrData = JSON.parse(decodedText);
       
       // Fetch registration details
       const { data: registration, error: regError } = await supabase
@@ -102,13 +92,12 @@ export default function QRScanner({ onClose }) {
       setError('Invalid QR code or registration not found: ' + err.message);
       setTimeout(() => {
         setError(null);
-        setScannedData(null);
         startScanning();
       }, 3000);
     }
   }
 
-  function onScanFailure(error) {
+  function onScanFailure() {
     // Ignore scan failures - they happen frequently
   }
 
@@ -126,7 +115,6 @@ export default function QRScanner({ onClose }) {
 
       alert('Attendance marked successfully!');
       setParticipantInfo(null);
-      setScannedData(null);
       startScanning();
     } catch (err) {
       alert('Error marking attendance: ' + err.message);
@@ -188,28 +176,17 @@ export default function QRScanner({ onClose }) {
         <div style={{
           flex: 1,
           overflow: 'auto',
-          padding: '24px',
-          background: '#fff'
+          padding: '24px'
         }}>
           <h2 style={{ marginTop: 0 }}>Participant Information</h2>
           
-          <div style={{
-            background: '#f9fafb',
-            padding: '20px',
-            borderRadius: '8px',
-            marginBottom: '20px'
-          }}>
+          <div className="card" style={{ marginBottom: '20px' }}>
             <h3 style={{ marginTop: 0 }}>Event Details</h3>
             <p><strong>Event:</strong> {participantInfo.registration.events?.title}</p>
             <p><strong>Description:</strong> {participantInfo.registration.events?.description}</p>
           </div>
 
-          <div style={{
-            background: '#f9fafb',
-            padding: '20px',
-            borderRadius: '8px',
-            marginBottom: '20px'
-          }}>
+          <div className="card" style={{ marginBottom: '20px' }}>
             <h3 style={{ marginTop: 0 }}>Participant Details</h3>
             <p><strong>Name:</strong> {participantInfo.profile.full_name || 'N/A'}</p>
             <p><strong>Email:</strong> {participantInfo.profile.email || 'N/A'}</p>
@@ -220,24 +197,20 @@ export default function QRScanner({ onClose }) {
             )}
           </div>
 
-          <div style={{
-            background: participantInfo.registration.attendance_marked ? '#d1fae5' : '#fef3c7',
-            padding: '16px',
-            borderRadius: '8px',
-            marginBottom: '20px',
-            textAlign: 'center'
-          }}>
-            <p style={{ margin: 0, fontWeight: '500' }}>
-              {participantInfo.registration.attendance_marked
-                ? '✓ Attendance Already Marked'
-                : 'Attendance Not Marked'}
-            </p>
-            {participantInfo.registration.attendance_marked_at && (
-              <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#64748b' }}>
-                Marked at: {new Date(participantInfo.registration.attendance_marked_at).toLocaleString()}
-              </p>
-            )}
-          </div>
+          {participantInfo.registration.attendance_marked ? (
+            <div className="alert alert-success" style={{ marginBottom: '20px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontWeight: '500' }}>✓ Attendance Already Marked</p>
+              {participantInfo.registration.attendance_marked_at && (
+                <p style={{ margin: '8px 0 0 0', fontSize: '14px' }}>
+                  Marked at: {new Date(participantInfo.registration.attendance_marked_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="alert alert-info" style={{ marginBottom: '20px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontWeight: '500' }}>Attendance Not Marked</p>
+            </div>
+          )}
 
           {!participantInfo.registration.attendance_marked && (
             <button
@@ -262,7 +235,6 @@ export default function QRScanner({ onClose }) {
           <button
             onClick={() => {
               setParticipantInfo(null);
-              setScannedData(null);
               startScanning();
             }}
             style={{

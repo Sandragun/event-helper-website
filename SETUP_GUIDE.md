@@ -42,9 +42,11 @@ Create a `.env` file in the project root:
 ```env
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key-here
+VITE_GEMINI_API_KEY=your-gemini-api-key
 ```
 
-Find these in: Supabase Dashboard → Settings → API
+- Supabase values are in **Settings → API**
+- Generate a Gemini key at [Google AI Studio](https://aistudio.google.com/)
 
 ## Step 4: Install and Run
 
@@ -60,9 +62,15 @@ npm run dev
 3. Find your user and change `role` from `'user'` to `'admin'`
 4. Now you can login as admin!
 
+## Step 6: Try the Chatbot
+
+- Open the user dashboard and click the 💬 Chatbot button
+- The Gemini assistant will ask for missing profile details and help register users
+- All conversations are logged via your webhook with profile identifiers
+
 ## That's it! 🎉
 
 - Visit `/` to see public events
-- Login as user to register for events
-- Login as admin to manage events and scan QR codes
+- Login as user to register for events or chat with the bot
+- Login as admin to manage events, preview posters, and scan QR codes
 

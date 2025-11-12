@@ -5,9 +5,10 @@ A web-based Event Registration Platform that allows organisers (admins) to manag
 ## Features
 
 - **User and Admin Authentication**: Separate login flows for users and admins
-- **Event Management (Admin)**: Full CRUD operations for events with poster upload
-- **Event Registration (User)**: Easy event registration with auto-filled user details
-- **QR Code Generation**: Unique QR codes generated for each event registration
+- **Event Management (Admin)**: Full CRUD operations for events with poster upload and live preview
+- **Event Registration (User)**: Easy event registration with auto-filled user details or conversational chatbot assistance
+- **AI Chatbot**: Gemini-powered assistant collects missing profile details, helps users pick events, and triggers registrations
+- **Persistent QR Codes**: Unique QR codes generated, saved with each registration, and downloadable later from the dashboard
 - **QR Code Scanning**: Admin can scan QR codes to mark attendance and view participant details
 
 ## Tech Stack
@@ -18,6 +19,7 @@ A web-based Event Registration Platform that allows organisers (admins) to manag
 - React Router DOM
 - QRCode.js (QR code generation)
 - html5-qrcode (QR code scanning)
+- Google Gemini (Generative AI powered chatbot)
 
 ## Setup Instructions
 
@@ -63,9 +65,10 @@ Create a `.env` file in the root directory:
 ```env
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_GEMINI_API_KEY=your_google_gemini_api_key
 ```
 
-You can find these values in your Supabase project settings under API.
+You can find Supabase values in your project settings under API. Generate a Gemini API key at [Google AI Studio](https://aistudio.google.com/).
 
 ### 4. Install Dependencies
 
@@ -86,13 +89,17 @@ The application will be available at `http://localhost:5173`
 ```
 src/
 ├── components/
-│   ├── ProtectedRouted.jsx    # Route protection component
-│   └── QRScanner.jsx           # QR code scanner for attendance
+│   ├── Chatbot.jsx             # Gemini-driven chatbot with webhook handoff
+│   ├── ErrorBoundary.jsx       # Global error catcher
+│   ├── ProtectedRouted.jsx     # Route protection component
+│   ├── QRScanner.jsx           # QR code scanner for attendance
+│   └── lib/
+│       └── gemini.js          # Gemini API helper
 ├── pages/
 │   ├── Auth.jsx                # Login/Register page
 │   ├── Events.jsx              # Public events viewing page
 │   ├── DashboardAdmin.jsx      # Admin dashboard with event CRUD
-│   └── DashboardUser.jsx       # User dashboard with registration
+│   └── DashboardUser.jsx       # User dashboard with registration + QR archive
 ├── App.jsx                     # Main app component with routing
 ├── supabaseClient.js           # Supabase client configuration
 └── main.jsx                    # Entry point
@@ -113,16 +120,16 @@ src/
 - Fields: id, registration_number, phone_number, created_at, updated_at
 
 ### 4. `event_registrations`
-- Stores event registrations with QR codes
-- Fields: id, event_id, user_id, qr_code, additional_details, attendance_marked, attendance_marked_at, registered_at
+- Stores event registrations with QR codes and chatbot metadata
+- Fields: id, event_id, user_id, qr_code, additional_details (includes stored QR image), attendance_marked, attendance_marked_at, registered_at
 
 ## Usage
 
 ### For Admins
 
 1. Login with an admin account (role must be 'admin' in profiles table)
-2. Create events with title, description, contact, and poster
-3. Approve events to make them visible to users
+2. Create events with title, description, contact, and poster (drag-drop or URL)
+3. Preview posters before saving and approve events to make them visible to users
 4. Use the QR scanner to mark attendance during events
 
 ### For Users
@@ -130,18 +137,24 @@ src/
 1. View all approved events on the home page (no login required)
 2. Register for an account
 3. Complete profile on first registration (Name, Registration Number, Email, Phone)
-4. Register for events (details auto-filled after first registration)
-5. Receive QR code after registration
-6. View registered events and attendance status
+4. Register via form or chat with the Gemini assistant to auto-fill missing details
+5. Receive QR code after registration and download it anytime from “My Registrations”
+6. View attendance status and event posters in your dashboard
 
 ## Important Notes
 
 - Admin accounts must be created/assigned manually in the database (set `role = 'admin'` in profiles table)
 - Events must be approved by admins to be visible to users
-- QR codes are unique per registration and contain event and user information
+- QR codes are unique per registration and stored with the registration record for future download
 - Camera permissions are required for QR code scanning
+- The chatbot calls both Gemini and your webhook (`/webhook/chatbot`) to keep external automations in sync
 
 ## Troubleshooting
+
+### Chatbot not responding
+- Ensure `VITE_GEMINI_API_KEY` is set
+- Check browser console for Gemini API errors
+- Verify webhook endpoint is reachable (200 response)
 
 ### QR Scanner not working
 - Ensure camera permissions are granted

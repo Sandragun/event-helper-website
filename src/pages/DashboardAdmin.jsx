@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import QRScanner from '../components/QRScanner';
+import CertificateManager from '../components/CertificateManager';
 
 export function DashboardAdmin() {
   const navigate = useNavigate();
@@ -163,253 +164,216 @@ export function DashboardAdmin() {
   }
 
   return (
-    <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ margin: 0 }}>Admin Dashboard</h1>
-        <div>
+    <div>
+      <div className="sidebar">
+        <button className="nav-item" onClick={() => setShowScanner(true)}>📱 Scan QR</button>
+        <Link to="/dashboard-admin" className="nav-item active">🔐 Admin Dashboard</Link>
+        <Link to="/events" className="nav-item">🎪 Events</Link>
+        <button className="nav-item" onClick={signOut}>🚪 Sign Out</button>
+      </div>
+      <div className="container layout-with-sidebar">
+        <div className="header">
+          <div>
+            <h1 style={{ marginBottom: 4 }}>🔐 Admin Dashboard</h1>
+            <p style={{ margin: 0, color: '#a0a0b0', fontSize: 14 }}>Manage events and scan attendances</p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button
+              onClick={() => setShowScanner(true)}
+              className="btn btn-success"
+            >
+              📱 Scan QR Code
+            </button>
+            <button
+              onClick={signOut}
+              className="btn btn-danger"
+            >
+              🚪 Sign Out
+            </button>
+          </div>
+        </div>
+
+      <div className="panel" style={{ marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 style={{ margin: 0 }}>Events</h2>
+            <p style={{ color: '#a0a0b0', margin: 0 }}>Manage and monitor your events</p>
+          </div>
           <button
-            onClick={() => setShowScanner(true)}
-            style={{
-              padding: '8px 16px',
-              marginRight: '12px',
-              background: '#10b981',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer'
+            onClick={() => {
+              setEditingEvent(null);
+              setFormData({
+                title: '',
+                description: '',
+                support_contact: '',
+                poster_url: '',
+                is_approved: false
+              });
+              setShowForm(true);
             }}
+            className="btn btn-primary"
+            style={{ fontSize: 16 }}
           >
-            Scan QR Code
-          </button>
-          <button
-            onClick={signOut}
-            style={{
-              padding: '8px 16px',
-              background: '#ef4444',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
-          >
-            Sign Out
+            ➕ Create New Event
           </button>
         </div>
       </div>
 
-      <div style={{ marginBottom: '24px' }}>
-        <button
-          onClick={() => {
-            setEditingEvent(null);
-            setFormData({
-              title: '',
-              description: '',
-              support_contact: '',
-              poster_url: '',
-              is_approved: false
-            });
-            setShowForm(true);
-          }}
-          style={{
-            padding: '10px 20px',
-            background: '#2563eb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          + Create New Event
-        </button>
-      </div>
-
       {showForm && (
-        <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', marginBottom: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ marginTop: 0 }}>{editingEvent ? 'Edit Event' : 'Create New Event'}</h2>
+        <div className="card" style={{ marginBottom: '24px' }}>
+          <h2 style={{ marginTop: 0, marginBottom: 8 }}>{editingEvent ? '✏️ Edit Event' : '➕ Create New Event'}</h2>
           <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Title *</label>
+            <div className="form-group">
+              <label>Event Title *</label>
               <input
                 type="text"
                 value={formData.title}
                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="e.g., Tech Conference 2024"
                 required
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Description</label>
+            <div className="form-group">
+              <label>Description</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Describe your event here..."
                 rows="4"
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontFamily: 'inherit' }}
+                style={{ resize: 'vertical' }}
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Support Contact</label>
+            <div className="form-group">
+              <label>Support Contact</label>
               <input
                 type="text"
                 value={formData.support_contact}
                 onChange={(e) => setFormData({ ...formData, support_contact: e.target.value })}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}
+                placeholder="contact@example.com or phone number"
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Poster URL</label>
+            <div className="form-group">
+              <label>Poster Image</label>
               <input
                 type="url"
                 value={formData.poster_url}
                 onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
                 placeholder="Or upload a file below"
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0', marginBottom: '8px' }}
+                style={{ marginBottom: '12px' }}
               />
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleFileUpload}
-                style={{ fontSize: '14px' }}
-              />
+              <div style={{ marginBottom: '12px' }}>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  style={{ fontSize: '14px' }}
+                />
+              </div>
+              {formData.poster_url && (
+                <div>
+                  <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#a0a0b0' }}>📸 Poster preview</p>
+                  <img
+                    src={formData.poster_url}
+                    alt="Event poster preview"
+                    style={{
+                      width: '100%',
+                      maxHeight: '250px',
+                      objectFit: 'cover',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.1)'
+                    }}
+                  />
+                </div>
+              )}
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', fontWeight: '600' }}>
                 <input
                   type="checkbox"
                   checked={formData.is_approved}
                   onChange={(e) => setFormData({ ...formData, is_approved: e.target.checked })}
+                  style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                 />
-                <span>Approve event (make visible to users)</span>
+                <span>✓ Approve event (make visible to users)</span>
               </label>
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button
-                type="submit"
-                style={{
-                  padding: '10px 20px',
-                  background: '#10b981',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                {editingEvent ? 'Update Event' : 'Create Event'}
+              <button type="submit" className="btn btn-success" style={{ flex: 1 }}>
+                {editingEvent ? '💾 Update Event' : '✅ Create Event'}
               </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                style={{
-                  padding: '10px 20px',
-                  background: '#64748b',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
+              <button type="button" onClick={handleCancel} className="btn btn-secondary" style={{ flex: 1 }}>
+                ❌ Cancel
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px' }}>Loading events...</div>
-      ) : (
-        <div style={{ display: 'grid', gap: '20px' }}>
-          {events.map((event) => (
-            <div
-              key={event.id}
-              style={{
-                background: '#fff',
-                padding: '24px',
-                borderRadius: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                display: 'grid',
-                gridTemplateColumns: event.poster_url ? '200px 1fr' : '1fr',
-                gap: '20px'
-              }}
-            >
-              {event.poster_url && (
-                <img
-                  src={event.poster_url}
-                  alt={event.title}
-                  style={{
-                    width: '100%',
-                    height: '200px',
-                    objectFit: 'cover',
-                    borderRadius: '8px'
-                  }}
-                />
-              )}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '12px' }}>
-                  <h2 style={{ margin: 0 }}>{event.title}</h2>
-                  <span
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      background: event.is_approved ? '#d1fae5' : '#fee2e2',
-                      color: event.is_approved ? '#065f46' : '#991b1b'
-                    }}
-                  >
-                    {event.is_approved ? 'Approved' : 'Pending'}
+      <div className="panel" style={{ marginBottom: '24px' }}>
+        {loading ? (
+          <div className="grid-3">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="card skeleton" style={{ height: 300 }} />
+            ))}
+          </div>
+        ) : events.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: 60 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🎪</div>
+            <h3 style={{ marginBottom: 8 }}>No Events Yet</h3>
+            <p style={{ color: '#a0a0b0', margin: 0 }}>Create your first event using the button above!</p>
+          </div>
+        ) : (
+          <div className="grid-3">
+            {events.map((event) => (
+              <div key={event.id} className="card fade-in">
+                {event.poster_url && (
+                  <img
+                    src={event.poster_url}
+                    alt={event.title}
+                    className="img-banner"
+                  />
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>{event.title}</h3>
+                  <span className={`badge ${event.is_approved ? 'badge-green' : 'badge-red'}`}>
+                    {event.is_approved ? '✓ Approved' : '⏳ Pending'}
                   </span>
                 </div>
-                <p style={{ color: '#64748b', marginBottom: '16px' }}>{event.description}</p>
+                <p style={{ color: '#a0a0b0', marginBottom: 12, fontSize: 14 }}>{event.description}</p>
                 {event.support_contact && (
-                  <p style={{ marginBottom: '16px' }}>
-                    <strong>Contact:</strong> {event.support_contact}
-                  </p>
+                  <div style={{ marginBottom: 16, padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, fontSize: 13 }}>
+                    <strong style={{ color: '#60a5fa' }}>📞 Contact:</strong> <span style={{ color: '#e0e0e0' }}>{event.support_contact}</span>
+                  </div>
                 )}
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <button
                     onClick={() => handleEdit(event)}
-                    style={{
-                      padding: '8px 16px',
-                      background: '#2563eb',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer'
-                    }}
+                    className="btn btn-primary"
+                    style={{ flex: 1, fontSize: 13, padding: '10px 16px' }}
                   >
-                    Edit
+                    ✏️ Edit
                   </button>
                   <button
                     onClick={() => handleDelete(event.id)}
-                    style={{
-                      padding: '8px 16px',
-                      background: '#ef4444',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer'
-                    }}
+                    className="btn btn-danger"
+                    style={{ flex: 1, fontSize: 13, padding: '10px 16px' }}
                   >
-                    Delete
+                    🗑️ Delete
                   </button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
-      {events.length === 0 && !loading && (
-        <div style={{ textAlign: 'center', padding: '40px', background: '#fff', borderRadius: '8px' }}>
-          <p>No events created yet. Create your first event!</p>
-        </div>
-      )}
+      <CertificateManager />
+      </div>
     </div>
   );
 }

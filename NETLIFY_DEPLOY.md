@@ -12,6 +12,7 @@ If you're seeing a white page on Netlify, follow these steps:
 4. Add these variables:
    - `VITE_SUPABASE_URL` = Your Supabase project URL
    - `VITE_SUPABASE_ANON_KEY` = Your Supabase anon key
+   - `VITE_GEMINI_API_KEY` = Your Google Gemini API key (needed for the chatbot)
 
 ### 2. Build Settings
 
@@ -60,7 +61,7 @@ After setting environment variables:
 
 1. **Check Environment Variables**:
    - Netlify Dashboard → Site settings → Environment variables
-   - Both `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` should be set
+   - `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_GEMINI_API_KEY` should be set
 
 2. **Check Build Logs**:
    - Netlify Dashboard → Deploys → Click on latest deploy
@@ -70,13 +71,14 @@ After setting environment variables:
    - Open your deployed site
    - Press F12 to open DevTools
    - Check Console tab for errors
-   - Look for "Missing Supabase environment variables" message
+   - Look for messages about missing Supabase or Gemini environment variables
 
 4. **Test the App**:
    - Visit your Netlify URL
    - You should see the Events page (homepage)
    - Try navigating to `/auth` route
    - Check if Supabase connection works
+   - Open the chatbot and verify it responds (requires Gemini key)
 
 ## Manual Deployment
 
@@ -104,6 +106,11 @@ npm run build
 - Make sure variable names start with `VITE_` (required for Vite)
 - Redeploy after adding/changing environment variables
 - Clear Netlify cache before redeploying
+
+### Chatbot says Gemini key missing
+
+- Add `VITE_GEMINI_API_KEY` in the Netlify environment settings
+- Redeploy with cache cleared
 
 ### Need Help?
 

@@ -3,10 +3,10 @@
 ## Overview
 
 The application now supports **dual registration methods**:
-1. **Traditional Form Registration** - Users fill out a form to register
-2. **Chatbot Registration** - Users can chat with a bot to register for events
+1. **Traditional Form Registration** – Users fill out a form to register
+2. **Gemini-Powered Chatbot** – Users can chat with an AI assistant that collects missing details, talks to your webhook, and finalises registration
 
-Both methods generate a **QR code** for event attendance.
+Both methods generate a **QR code** for event attendance and store the QR image with the registration so it can be downloaded later.
 
 ## How It Works
 
@@ -14,165 +14,159 @@ Both methods generate a **QR code** for event attendance.
 
 The chatbot is accessible from the User Dashboard via a "💬 Chatbot" button. When opened, it:
 
-1. **Sends GET requests** to your webhook: `https://supasanjay.app.n8n.cloud/webhook-test/chatbot`
-2. **Passes context** including:
-   - User information (name, email, registration number, phone)
-   - Available events list
-   - User's message
+1. **Calls Google Gemini** using `VITE_GEMINI_API_KEY` to craft the next response and decide if enough data exists to register.
+2. **Sends GET requests** to your webhook: `https://supasanjay.app.n8n.cloud/webhook/chatbot`
+3. **Passes context** including:
+   - User profile information (id, name, email, registration number, phone, role)
+   - Available events list (id, title, description, contact)
+   - Full conversation history
+   - Gemini's structured response (for logging or downstream automations)
 
 ### Webhook Request Format
 
 ```
-GET https://supasanjay.app.n8n.cloud/webhook-test/chatbot?message=<user_message>&context=<json_context>
+GET https://supasanjay.app.n8n.cloud/webhook/chatbot?message=<user_message>&context=<json_context>&profileId=<uuid>&userId=<uuid>
 ```
 
 **Query Parameters:**
-- `message`: The user's chat message
+- `message`: The user's latest chat message
 - `context`: JSON string containing:
   ```json
   {
     "userInfo": {
+      "id": "user-uuid",
+      "profile_id": "user-uuid",
       "email": "user@example.com",
       "name": "John Doe",
       "registration_number": "REG123",
-      "phone": "1234567890"
+      "phone": "1234567890",
+      "role": "user"
     },
     "availableEvents": [
       {
         "id": "event-uuid",
         "title": "Event Title",
-        "description": "Event Description"
+        "description": "Event Description",
+        "support_contact": "support@example.com"
       }
     ],
-    "userMessage": "I want to register for an event"
+    "userMessage": "I want to register for an event",
+    "geminiResult": {
+      "message": "JSON response produced by Gemini",
+      "registerEvent": false,
+      "eventId": null,
+      "eventName": null,
+      "missingFields": ["phone number"]
+    }
   }
   ```
+- `profileId` / `userId`: direct access to the Supabase `auth.users` id
 
-### Expected Webhook Response
+### Gemini Response Format
 
-The webhook should return a JSON response. The chatbot handles multiple formats:
-
-**Option 1: Simple Message**
+Gemini is instructed to respond with JSON only:
 ```json
 {
-  "message": "I can help you register for events!"
+  "message": "Hi! I can help you register for events.",
+  "followUps": ["Which event would you like?"],
+  "missingFields": ["phone number"],
+  "registerEvent": false,
+  "eventId": null,
+  "eventName": null,
+  "needsWebhook": true,
+  "webhookPayload": {"tags": ["greeting"]}
 }
 ```
-
-**Option 2: Event Registration Response**
-```json
-{
-  "message": "I'll register you for the Tech Conference event!",
-  "eventId": "event-uuid-here",
-  "registerEvent": true
-}
-```
-
-**Option 3: Text Response (non-JSON)**
-```
-Plain text response will be displayed as bot message
-```
+The chatbot renders `message` (and follow-ups) to the user, politely asks for missing fields, and only triggers registration when `registerEvent` is `true`.
 
 ### Registration Flow
 
-1. User sends a message via chatbot
-2. Chatbot sends GET request to webhook with user message and context
-3. Webhook processes the request and returns a response
-4. If the response indicates registration intent:
-   - Chatbot extracts event ID (from `eventId` field or by parsing event name)
-   - Verifies user is logged in
-   - Checks if user has required details (registration number, phone)
-   - Creates registration in database
-   - Generates QR code
-   - Displays QR code to user
+1. User sends a message via chatbot.
+2. Gemini analyses the conversation, determines missing data, and may ask clarifying questions.
+3. Context + Gemini output are forwarded to your webhook (optional for automations/logging).
+4. When Gemini marks `registerEvent: true` and identifies an event:
+   - Chatbot matches the event by id or name.
+   - Verifies the user is logged in and profile details are complete.
+   - Creates a registration record in Supabase.
+   - Generates a QR code **and stores the image (Data URL)** inside `event_registrations.additional_details.qr_code_image`.
+   - Displays the QR code in a modal so the user can download it immediately.
 
-### QR Code Generation
+### QR Code Generation & Storage
 
-After successful registration (via form or chatbot), a QR code is generated containing:
+Each registration stores:
 ```json
 {
   "event_id": "event-uuid",
   "user_id": "user-uuid",
-  "timestamp": 1234567890
+  "timestamp": 1731352200000
 }
 ```
+- `qr_code` field keeps the raw payload (used for scanning)
+- `additional_details.qr_code_image` stores the PNG Data URL for future downloads
 
-This QR code can be scanned by admins to mark attendance.
+Users can revisit **My Registrations** to re-download the QR at any time.
 
 ## Integration Points
 
 ### User Dashboard
-- **Chatbot Button**: Green "💬 Chatbot" button in the header
-- Opens chatbot interface in a floating window
-- Passes current events list to chatbot
+- **Chatbot Button**: Opens/closes the AI assistant.
+- **My Registrations**: Shows event posters, notes, attendance status, and QR download buttons.
 
 ### Chatbot Features
-- Real-time chat interface
-- Webhook integration
-- Event registration via chat
-- QR code generation and display
-- Auto-refresh of user data after registration
+- Gemini-driven natural language understanding
+- Missing detail detection (name, registration number, email, phone)
+- Webhook logging with profile identifiers
+- Inline QR code download after registration
+- Stored QR images for later retrieval
 
-## Webhook Response Formats Supported
+## Webhook Response Handling
 
-The chatbot is flexible and handles:
+The chatbot still consumes webhook responses if they contain a `message` field (e.g. acknowledgements or custom prompts). Everything else is ignored after logging, so your webhook can remain optional.
 
-1. **JSON with message field**: `{ "message": "..." }`
-2. **JSON with response field**: `{ "response": "..." }`
-3. **JSON with text field**: `{ "text": "..." }`
-4. **JSON with answer field**: `{ "answer": "..." }`
-5. **Plain text responses**
-6. **Event registration indicators**:
-   - `eventId` or `event_id` field
-   - `registerEvent`, `register`, or `register_for_event` boolean
-   - Text containing "register" or "sign up"
+Supported response types:
+1. JSON with `message`, `response`, `text`, or `answer`
+2. Plain text strings
+3. JSON objects with `eventId`, `registerEvent`, etc. (legacy support)
 
 ## Example Conversations
 
 ### User: "What events are available?"
-**Webhook Response:**
-```json
-{
-  "message": "Here are the available events: Tech Conference, Hackathon, Workshop. Which one would you like to register for?"
-}
-```
+Gemini responds with a friendly list and follow-up question. Webhook receives the full context for logging.
 
 ### User: "Register me for Tech Conference"
-**Webhook Response:**
+Gemini response:
 ```json
 {
-  "message": "I'll register you for the Tech Conference!",
-  "eventId": "tech-conference-uuid",
-  "registerEvent": true
+  "message": "Great choice! I'll sign you up for Tech Conference.",
+  "registerEvent": true,
+  "eventName": "Tech Conference",
+  "eventId": "2e1b179a-fa2d-4f68-a5a8-123456789abc"
 }
 ```
-
-The chatbot will then:
-1. Register the user for the event
-2. Generate a QR code
-3. Display the QR code in a modal
+The chatbot completes registration, stores the QR image, and displays the download modal.
 
 ## Error Handling
 
-- If webhook is unavailable, chatbot shows error message
-- If user is not logged in, chatbot prompts for login
-- If user details are missing, chatbot requests information
-- If event not found, chatbot informs user
-- If already registered, chatbot confirms existing registration
+- **Missing Gemini key**: Chatbot falls back to webhook-only behaviour and logs a console warning.
+- **Webhook down**: Gemini conversation continues; webhook errors are logged to console.
+- **User not logged in**: Chatbot prompts the user to log in.
+- **Profile incomplete**: Chatbot requests missing details before registering.
+- **Duplicate registration**: User is informed they're already registered.
 
 ## Testing
 
-1. Log in as a user
-2. Click "💬 Chatbot" button
-3. Send a message to test webhook connection
-4. Try registering for an event via chatbot
-5. Verify QR code is generated and displayed
+1. Log in as a user.
+2. Click the "💬 Chatbot" button.
+3. Ask about events; confirm AI response.
+4. Proceed with registration via chatbot.
+5. Confirm QR modal appears and “My Registrations” shows the saved QR + poster.
+6. Check your n8n workflow receives requests at `https://supasanjay.app.n8n.cloud/webhook/chatbot`.
 
 ## Notes
 
-- Chatbot requires user to be logged in for registration
-- User must have registration number and phone number in profile
-- Chatbot automatically refreshes user data after registration
-- QR codes are unique per registration
-- Both form and chatbot registrations use the same database table
+- Chatbot requires `VITE_GEMINI_API_KEY` to be set (for local and Netlify builds).
+- Webhook requests always include `profileId` so you can tie chats to Supabase users.
+- Stored QR images allow users to re-download without re-registering.
+- Admin dashboard shows the latest poster previews automatically after uploads.
+- Both form and chatbot registrations share the same table and QR scanning logic.
 

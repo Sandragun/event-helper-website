@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import QRCode from 'qrcode';
+import { generateGeminiResponse } from '../lib/gemini';
 
 export default function Chatbot({ onClose, events = [] }) {
   const [messages, setMessages] = useState([
     {
       type: 'bot',
-      text: 'Hello! I can help you register for events. What would you like to do?'
+      text: 'Hello! I can help you register for events. Here are the available events:'
     }
   ]);
   const [input, setInput] = useState('');
@@ -15,9 +16,52 @@ export default function Chatbot({ onClose, events = [] }) {
   const [registeredEvent, setRegisteredEvent] = useState(null);
   const messagesEndRef = useRef(null);
   const [userInfo, setUserInfo] = useState(null);
+  const [pendingField, setPendingField] = useState(null);
+  const [selectedEventId, setSelectedEventId] = useState(null);
+
+  const FIELD_LABELS = {
+    registration_number: 'registration number',
+    phone: 'phone number',
+    name: 'full name',
+    email: 'email address'
+  };
+
+  const FIELD_PROMPTS = {
+    registration_number: 'Please provide your registration number.',
+    phone: 'Thanks! Now please provide your phone number.',
+    name: 'What is your full name?',
+    email: 'Finally, what is your email address?'
+  };
+
+  function fieldFromString(str) {
+    if (!str) return null;
+    const lower = str.toLowerCase();
+    if (lower.includes('registration')) return 'registration_number';
+    if (lower.includes('phone')) return 'phone';
+    if (lower.includes('name')) return 'name';
+    if (lower.includes('email')) return 'email';
+    return null;
+  }
+
+  function findNextMissing(info = {}) {
+    const missing = [];
+    if (!info.registration_number) missing.push('registration_number');
+    if (!info.phone) missing.push('phone');
+    if (!info.name) missing.push('name');
+    if (!info.email) missing.push('email');
+    return missing;
+  }
+
+  function promptForField(field) {
+    return FIELD_PROMPTS[field] || `Please provide your ${FIELD_LABELS[field] || 'details'}.`;
+  }
 
   useEffect(() => {
     fetchUserInfo();
+  }, []);
+
+  useEffect(() => {
+    postEventsList();
   }, []);
 
   useEffect(() => {
@@ -42,8 +86,8 @@ export default function Chatbot({ onClose, events = [] }) {
         .single();
 
       setUserInfo({
-        id: user.id, // Profile ID (same as auth.users id)
-        profile_id: profile?.id || user.id, // Explicit profile ID
+        id: user.id,
+        profile_id: profile?.id || user.id,
         email: profile?.email || user.email,
         name: profile?.full_name,
         registration_number: userDetails?.registration_number,
@@ -59,187 +103,216 @@ export default function Chatbot({ onClose, events = [] }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }
 
+  function postEventsList(prefixText) {
+    const eventChips = events.map(e => ({ id: e.id, title: e.title }));
+    setMessages(prev => [
+      ...prev,
+      ...(prefixText ? [{ type: 'bot', text: prefixText }] : []),
+      {
+        type: 'bot',
+        text: 'Tap an event below to register:',
+        events: eventChips
+      }
+    ]);
+  }
+
+  function handleSelectEvent(eventId, infoOverride) {
+    setSelectedEventId(eventId);
+    const event = events.find(e => e.id === eventId);
+    setMessages(prev => [...prev, { type: 'bot', text: `You selected: ${event?.title || 'event'}.` }]);
+    const info = infoOverride || userInfo || {};
+    const missing = findNextMissing(info);
+    if (missing.length) {
+      const nextField = missing[0];
+      setPendingField(nextField);
+      setMessages(prev => [...prev, { type: 'bot', text: promptForField(nextField) }]);
+    } else {
+      void handleEventRegistration(eventId, 'Registered via chatbot event selection', info);
+    }
+  }
+
+  async function capturePendingField(value) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setMessages(prev => [...prev, { type: 'bot', text: 'Please sign in to continue.' }]);
+      return;
+    }
+
+    let updatedInfo = { ...(userInfo || {}), id: user.id };
+
+    if (pendingField === 'registration_number') {
+      await supabase.from('user_details').upsert({ id: user.id, registration_number: trimmed });
+      updatedInfo = { ...updatedInfo, registration_number: trimmed };
+      setUserInfo(updatedInfo);
+      const queue = findNextMissing(updatedInfo);
+      if (queue.length) {
+        const next = queue[0];
+        setPendingField(next);
+        setMessages(prev => [...prev, { type: 'bot', text: promptForField(next) }]);
+      } else if (selectedEventId) {
+        setPendingField(null);
+        await handleEventRegistration(selectedEventId, 'Registered via chatbot after collecting details', updatedInfo);
+      } else {
+        setPendingField(null);
+        setMessages(prev => [...prev, { type: 'bot', text: 'Thanks! You can pick an event anytime.' }]);
+        postEventsList();
+      }
+      return;
+    }
+
+    if (pendingField === 'phone') {
+      await supabase.from('user_details').upsert({ id: user.id, phone_number: trimmed });
+      updatedInfo = { ...updatedInfo, phone: trimmed };
+      setUserInfo(updatedInfo);
+      const queue = findNextMissing(updatedInfo);
+      if (queue.length) {
+        const next = queue[0];
+        setPendingField(next);
+        setMessages(prev => [...prev, { type: 'bot', text: promptForField(next) }]);
+      } else if (selectedEventId) {
+        setPendingField(null);
+        await handleEventRegistration(selectedEventId, 'Registered via chatbot after collecting details', updatedInfo);
+      } else {
+        setPendingField(null);
+        setMessages(prev => [...prev, { type: 'bot', text: 'Great! Now choose an event to register.' }]);
+        postEventsList();
+      }
+      return;
+    }
+
+    if (pendingField === 'name') {
+      await supabase.from('profiles').update({ full_name: trimmed }).eq('id', user.id);
+      updatedInfo = { ...updatedInfo, name: trimmed };
+      setUserInfo(updatedInfo);
+      const queue = findNextMissing(updatedInfo);
+      if (queue.length) {
+        const next = queue[0];
+        setPendingField(next);
+        setMessages(prev => [...prev, { type: 'bot', text: promptForField(next) }]);
+      } else if (selectedEventId) {
+        setPendingField(null);
+        await handleEventRegistration(selectedEventId, 'Registered via chatbot after collecting details', updatedInfo);
+      } else {
+        setPendingField(null);
+        setMessages(prev => [...prev, { type: 'bot', text: 'Nice to meet you! Ready to pick an event?' }]);
+        postEventsList();
+      }
+      return;
+    }
+
+    if (pendingField === 'email') {
+      await supabase.from('profiles').update({ email: trimmed }).eq('id', user.id);
+      updatedInfo = { ...updatedInfo, email: trimmed };
+      setUserInfo(updatedInfo);
+      const queue = findNextMissing(updatedInfo);
+      if (queue.length) {
+        const next = queue[0];
+        setPendingField(next);
+        setMessages(prev => [...prev, { type: 'bot', text: promptForField(next) }]);
+      } else if (selectedEventId) {
+        setPendingField(null);
+        await handleEventRegistration(selectedEventId, 'Registered via chatbot after collecting details', updatedInfo);
+      } else {
+        setPendingField(null);
+        setMessages(prev => [...prev, { type: 'bot', text: 'Great! You can now choose an event to register.' }]);
+        postEventsList();
+      }
+      return;
+    }
+  }
+
   async function sendMessage(userMessage) {
     if (!userMessage.trim()) return;
 
-    // Add user message to chat
-    const newUserMessage = {
-      type: 'user',
-      text: userMessage
-    };
-    setMessages(prev => [...prev, newUserMessage]);
+    const newUserMessage = { type: 'user', text: userMessage };
+    const updatedMessages = [...messages, newUserMessage];
+    setMessages(updatedMessages);
     setInput('');
+
+    if (pendingField) {
+      setLoading(true);
+      try {
+        await capturePendingField(userMessage);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    const lower = userMessage.toLowerCase();
+    if (lower === 'list' || lower === 'events' || lower.includes('show events')) {
+      postEventsList('Here are the available events:');
+      return;
+    }
+
+    const matched = events.find(e => e.title.toLowerCase().includes(lower));
+    if (matched) {
+      handleSelectEvent(matched.id);
+      return;
+    }
+
     setLoading(true);
-
     try {
-      // Get current user to ensure we have the latest ID
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      // Prepare context for chatbot with profile ID
       const context = {
-        userInfo: {
-          ...userInfo,
-          id: user?.id || userInfo?.id, // Profile ID from auth.users
-          profile_id: user?.id || userInfo?.profile_id // Explicit profile ID
-        },
-        profileId: user?.id, // Direct profile ID field
-        userId: user?.id, // User ID (same as profile ID)
-        availableEvents: events.map(e => ({
-          id: e.id,
-          title: e.title,
-          description: e.description
-        })),
-        userMessage: userMessage
+        userInfo: { ...(userInfo || {}) },
+        availableEvents: events.map(e => ({ id: e.id, title: e.title, description: e.description, support_contact: e.support_contact })),
+        userMessage
       };
-
-      // Send GET request to webhook with query parameters
-      const webhookUrl = new URL('https://supasanjay.app.n8n.cloud/webhook/chatbot');
-      webhookUrl.searchParams.append('message', userMessage);
-      webhookUrl.searchParams.append('context', JSON.stringify(context));
-      
-      // Also send profile ID as a separate parameter for easy access
-      if (user?.id) {
-        webhookUrl.searchParams.append('profileId', user.id);
-        webhookUrl.searchParams.append('userId', user.id);
-      }
-
-      // Log what we're sending to webhook
-      console.log('Sending to webhook:', {
-        url: webhookUrl.toString(),
-        profileId: user?.id,
-        context: context
-      });
-
-      const response = await fetch(webhookUrl.toString(), {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Webhook error: ${response.status}`);
-      }
-
-      // Handle different response types
-      let data;
-      const contentType = response.headers.get('content-type');
-      
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
+      const geminiResult = await generateGeminiResponse({ messages: updatedMessages, context });
+      if (geminiResult?.message) {
+        setMessages(prev => [...prev, { type: 'bot', text: geminiResult.message }]);
       } else {
-        const text = await response.text();
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = { message: text, rawResponse: text };
-        }
-      }
-      
-      // Display the full webhook response
-      console.log('Webhook response:', data);
-      
-      // Extract message from various possible fields
-      let botResponse = data.message || data.response || data.text || data.answer || data.output || data.reply;
-      
-      // If no message field found, try to format the entire response
-      if (!botResponse && typeof data === 'object') {
-        // If it's an object, try to create a readable message
-        if (Object.keys(data).length === 1 && typeof Object.values(data)[0] === 'string') {
-          botResponse = Object.values(data)[0];
-        } else {
-          // Display the full response as formatted JSON
-          botResponse = JSON.stringify(data, null, 2);
-        }
-      }
-      
-      // Fallback if still no response
-      if (!botResponse) {
-        botResponse = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-      }
-      
-      // Check if chatbot wants to register for an event
-      // Look for event ID in response
-      const eventId = data.eventId || data.event_id || data.eventID;
-      
-      // Or try to parse event name from response
-      const eventMatch = botResponse.match(/register.*event[:\s]+(.+)/i) || 
-                        botResponse.match(/event[:\s]+(.+)/i) ||
-                        botResponse.match(/register.*for[:\s]+(.+)/i);
-      
-      let foundEventId = eventId;
-      if (!foundEventId && eventMatch) {
-        foundEventId = findEventByName(eventMatch[1]);
-      }
-      
-      // Check if response indicates registration intent
-      const wantsToRegister = data.registerEvent || 
-                             data.register || 
-                             data.register_for_event ||
-                             data.shouldRegister ||
-                             botResponse.toLowerCase().includes('register') ||
-                             botResponse.toLowerCase().includes('sign up');
-      
-      // If registration is requested, handle it
-      if (foundEventId && wantsToRegister) {
-        await handleEventRegistration(foundEventId, botResponse);
-        return;
+        setMessages(prev => [...prev, { type: 'bot', text: 'You can type “list” to see available events, or click one above.' }]);
       }
 
-      // Add bot response - display the webhook output
-      // If the response is a JSON object, format it nicely
-      let displayText = botResponse;
-      if (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length > 1) {
-        // Check if we should show formatted JSON
-        try {
-          const formatted = JSON.stringify(data, null, 2);
-          // Only show formatted JSON if it's not too long (less than 1000 chars)
-          if (formatted.length < 1000) {
-            displayText = formatted;
-          } else {
-            // For long responses, show the message field if available, otherwise show summary
-            displayText = botResponse || `Received response with ${Object.keys(data).length} fields`;
-          }
-        } catch (e) {
-          displayText = botResponse;
+      const missingFromAi = (geminiResult?.missingFields || [])
+        .map(fieldFromString)
+        .filter(Boolean);
+      if (!pendingField && missingFromAi.length) {
+        const info = userInfo || {};
+        const queue = findNextMissing(info);
+        const field = queue.length ? queue[0] : missingFromAi[0];
+        if (field) {
+          setPendingField(field);
+          setMessages(prev => [...prev, { type: 'bot', text: promptForField(field) }]);
+          return;
         }
       }
-      
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        text: displayText
-      }]);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        text: 'Sorry, I encountered an error. Please try again or use the form to register.'
-      }]);
+
+      const potentialEventId = geminiResult?.eventId || (geminiResult?.eventName ? findEventByName(geminiResult.eventName) : null);
+      if (geminiResult?.registerEvent && potentialEventId) {
+        handleSelectEvent(potentialEventId);
+      }
+    } catch (err) {
+      console.error('Gemini error', err);
+      setMessages(prev => [...prev, { type: 'bot', text: 'Sorry, I did not get that. Type “list” to see available events.' }]);
     } finally {
       setLoading(false);
     }
   }
 
-  function findEventByName(eventName) {
-    const event = events.find(e => 
-      e.title.toLowerCase().includes(eventName.toLowerCase()) ||
-      eventName.toLowerCase().includes(e.title.toLowerCase())
+  function findEventByName(eventIdentifier) {
+    if (!eventIdentifier) return null;
+    const lower = eventIdentifier.toLowerCase();
+    const event = events.find(e =>
+      e.id === eventIdentifier ||
+      e.title.toLowerCase() === lower ||
+      e.title.toLowerCase().includes(lower) ||
+      lower.includes(e.title.toLowerCase())
     );
     return event?.id;
   }
 
-  async function handleEventRegistration(eventId, chatbotMessage) {
+  async function handleEventRegistration(eventId, chatbotMessage, latestInfo) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        setMessages(prev => [...prev, {
-          type: 'bot',
-          text: 'You need to be logged in to register. Please log in first.'
-        }]);
+        setMessages(prev => [...prev, { type: 'bot', text: 'You need to be logged in to register. Please log in first.' }]);
         return;
       }
 
-      // Check if already registered
       const { data: existing } = await supabase
         .from('event_registrations')
         .select('*')
@@ -248,257 +321,118 @@ export default function Chatbot({ onClose, events = [] }) {
         .single();
 
       if (existing) {
-        setMessages(prev => [...prev, {
-          type: 'bot',
-          text: 'You are already registered for this event!'
-        }]);
+        setMessages(prev => [...prev, { type: 'bot', text: 'You are already registered for this event!' }]);
         return;
       }
 
-      // Check if user has required details
-      if (!userInfo?.registration_number || !userInfo?.phone) {
-        setMessages(prev => [...prev, {
-          type: 'bot',
-          text: 'I need some information to complete your registration. Please provide your registration number and phone number.'
-        }]);
+      const info = latestInfo || userInfo || {};
+      if (!info.registration_number || !info.phone || !info.name || !info.email) {
+        const queue = findNextMissing(info);
+        const next = queue[0];
+        setPendingField(next);
+        setMessages(prev => [...prev, { type: 'bot', text: promptForField(next) }]);
         return;
       }
 
-      // Generate QR code data
-      const qrData = JSON.stringify({
-        event_id: eventId,
-        user_id: user.id,
-        timestamp: Date.now()
-      });
-
-      // Generate QR code image
+      const qrData = JSON.stringify({ event_id: eventId, user_id: user.id, timestamp: Date.now() });
       const qrCodeDataUrl = await QRCode.toDataURL(qrData);
 
-      // Insert registration
+      const additionalDetails = {
+        registered_via: 'chatbot',
+        chatbot_message: chatbotMessage,
+        qr_code_image: qrCodeDataUrl
+      };
+
       const { error } = await supabase
         .from('event_registrations')
-        .insert([{
-          event_id: eventId,
-          user_id: user.id,
-          qr_code: qrData,
-          additional_details: { registered_via: 'chatbot', chatbot_message: chatbotMessage }
-        }]);
+        .insert([{ event_id: eventId, user_id: user.id, qr_code: qrData, additional_details: additionalDetails }]);
 
       if (error) throw error;
 
-      // Find event details
       const event = events.find(e => e.id === eventId);
       setRegisteredEvent(event);
       setQrCodeUrl(qrCodeDataUrl);
+      setSelectedEventId(null);
 
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        text: `Great! I've registered you for "${event?.title || 'the event'}". Your QR code is ready!`
-      }]);
+      setMessages(prev => [...prev, { type: 'bot', text: `Great! I've registered you for "${event?.title || 'the event'}". Your QR code is ready!` }]);
     } catch (error) {
       console.error('Error registering for event:', error);
-      setMessages(prev => [...prev, {
-        type: 'bot',
-        text: 'Sorry, I encountered an error while registering. Please try using the registration form.'
-      }]);
+      setMessages(prev => [...prev, { type: 'bot', text: 'Sorry, I encountered an error while registering. Please try again.' }]);
     }
   }
 
   function handleSubmit(e) {
     e.preventDefault();
     if (input.trim() && !loading) {
-      sendMessage(input);
+      sendMessage(input.trim());
     }
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      bottom: '20px',
-      right: '20px',
-      width: '400px',
-      height: '600px',
-      background: '#fff',
-      borderRadius: '12px',
-      boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-      display: 'flex',
-      flexDirection: 'column',
-      zIndex: 1000
-    }}>
-      {/* Header */}
-      <div style={{
-        padding: '16px',
-        background: '#2563eb',
-        color: '#fff',
-        borderRadius: '12px 12px 0 0',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
+    <div style={{ position: 'fixed', bottom: '20px', right: '20px', width: '400px', height: '600px', background: '#fff', borderRadius: '12px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', zIndex: 1000 }}>
+      <div style={{ padding: '16px', background: '#2563eb', color: '#fff', borderRadius: '12px 12px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h3 style={{ margin: 0, fontSize: '18px' }}>Event Registration Bot</h3>
           <p style={{ margin: '4px 0 0 0', fontSize: '12px', opacity: 0.9 }}>Ask me about events!</p>
         </div>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'rgba(255,255,255,0.2)',
-            border: 'none',
-            color: '#fff',
-            borderRadius: '50%',
-            width: '32px',
-            height: '32px',
-            cursor: 'pointer',
-            fontSize: '20px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          ×
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', borderRadius: '50%', width: '32px', height: '32px', cursor: 'pointer', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }} aria-label="Close chatbot">×</button>
+          <button onClick={onClose} style={{ background: '#1d4ed8', border: 'none', color: '#fff', borderRadius: '16px', padding: '6px 12px', cursor: 'pointer', fontSize: '12px' }}>Hide</button>
+        </div>
       </div>
 
-      {/* Messages */}
-      <div style={{
-        flex: 1,
-        overflowY: 'auto',
-        padding: '16px',
-        background: '#f9fafb'
-      }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px', background: '#f9fafb' }}>
         {messages.map((msg, idx) => (
-          <div
-            key={idx}
-            style={{
-              marginBottom: '12px',
-              display: 'flex',
-              justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start'
-            }}
-          >
-            <div style={{
-              maxWidth: '75%',
-              padding: '10px 14px',
-              borderRadius: '18px',
-              background: msg.type === 'user' ? '#2563eb' : '#e5e7eb',
-              color: msg.type === 'user' ? '#fff' : '#111',
-              fontSize: '14px',
-              lineHeight: '1.4',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-              fontFamily: msg.type === 'bot' && msg.text.includes('{') ? 'monospace' : 'inherit'
-            }}>
+          <div key={`${idx}-${msg.text?.slice?.(0, 10) || 'row'}`} style={{ marginBottom: '12px', display: 'flex', justifyContent: msg.type === 'user' ? 'flex-end' : 'flex-start' }}>
+            <div style={{ maxWidth: '75%', padding: '10px 14px', borderRadius: '18px', background: msg.type === 'user' ? '#2563eb' : '#e5e7eb', color: msg.type === 'user' ? '#fff' : '#111', fontSize: '14px', lineHeight: '1.4', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: msg.type === 'bot' && msg.text?.includes?.('{') ? 'monospace' : 'inherit' }}>
               {msg.text}
             </div>
           </div>
         ))}
+
+        {/* Render event quick actions if present on last bot message */}
+        {messages[messages.length - 1]?.events && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: -4 }}>
+            {messages[messages.length - 1].events.map((evt) => (
+              <button
+                key={evt.id}
+                onClick={() => handleSelectEvent(evt.id)}
+                style={{ padding: '8px 12px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '999px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                {evt.title}
+              </button>
+            ))}
+          </div>
+        )}
+
         {loading && (
           <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '12px' }}>
-            <div style={{
-              padding: '10px 14px',
-              borderRadius: '18px',
-              background: '#e5e7eb',
-              color: '#111',
-              fontSize: '14px'
-            }}>
-              Typing...
-            </div>
+            <div style={{ padding: '10px 14px', borderRadius: '18px', background: '#e5e7eb', color: '#111', fontSize: '14px' }}>Typing...</div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <form onSubmit={handleSubmit} style={{
-        padding: '16px',
-        borderTop: '1px solid #e5e7eb',
-        display: 'flex',
-        gap: '8px'
-      }}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Type your message..."
-          disabled={loading}
-          style={{
-            flex: 1,
-            padding: '10px 14px',
-            border: '1px solid #e5e7eb',
-            borderRadius: '20px',
-            fontSize: '14px',
-            outline: 'none'
-          }}
-        />
-        <button
-          type="submit"
-          disabled={loading || !input.trim()}
-          style={{
-            padding: '10px 20px',
-            background: '#2563eb',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '20px',
-            cursor: loading || !input.trim() ? 'not-allowed' : 'pointer',
-            opacity: loading || !input.trim() ? 0.5 : 1
-          }}
-        >
-          Send
-        </button>
+      <form onSubmit={handleSubmit} style={{ padding: '16px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '8px' }}>
+        <input type="text" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type your message... (or 'list')" disabled={loading} style={{ flex: 1, padding: '10px 14px', border: '1px solid #e2e8f0', borderRadius: '20px', fontSize: '14px', outline: 'none' }} />
+        <button type="submit" disabled={loading || !input.trim()} style={{ padding: '10px 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '20px', cursor: loading || !input.trim() ? 'not-allowed' : 'pointer', opacity: loading || !input.trim() ? 0.5 : 1 }}>Send</button>
       </form>
+      <div style={{ padding: '0 16px 16px 16px' }}>
+        <button onClick={onClose} style={{ width: '100%', padding: '10px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer' }}>
+          Close Chat
+        </button>
+      </div>
 
-      {/* QR Code Modal */}
       {qrCodeUrl && registeredEvent && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.8)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: '12px',
-          zIndex: 2000
-        }}>
-          <div style={{
-            background: '#fff',
-            padding: '24px',
-            borderRadius: '12px',
-            textAlign: 'center',
-            maxWidth: '90%'
-          }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px', zIndex: 2000 }}>
+          <div style={{ background: '#fff', padding: '24px', borderRadius: '12px', textAlign: 'center', maxWidth: '90%' }}>
             <h3 style={{ marginTop: 0 }}>Registration Successful!</h3>
-            <p style={{ marginBottom: '16px', color: '#64748b' }}>
-              {registeredEvent.title}
-            </p>
-            <img
-              src={qrCodeUrl}
-              alt="QR Code"
-              style={{
-                maxWidth: '250px',
-                marginBottom: '16px',
-                border: '2px solid #e5e7eb',
-                borderRadius: '8px',
-                padding: '8px'
-              }}
-            />
-            <button
-              onClick={() => {
-                setQrCodeUrl(null);
-                setRegisteredEvent(null);
-              }}
-              style={{
-                padding: '10px 20px',
-                background: '#2563eb',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer'
-              }}
-            >
-              Close
-            </button>
+            <p style={{ marginBottom: '16px', color: '#64748b' }}>{registeredEvent.title}</p>
+            <img src={qrCodeUrl} alt="QR Code" style={{ maxWidth: '250px', marginBottom: '16px', border: '2px solid #e5e7eb', borderRadius: '8px', padding: '8px' }} />
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button onClick={() => { const link = document.createElement('a'); link.href = qrCodeUrl; link.download = `${registeredEvent.title || 'event'}-qr.png`; link.click(); }} style={{ padding: '10px 20px', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Download QR</button>
+              <button onClick={() => { setQrCodeUrl(null); setRegisteredEvent(null); }} style={{ padding: '10px 20px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Close</button>
+            </div>
           </div>
         </div>
       )}

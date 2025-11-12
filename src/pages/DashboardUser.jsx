@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import QRCode from 'qrcode';
 import Chatbot from '../components/Chatbot';
 
@@ -31,28 +31,24 @@ export function DashboardUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Fetch user profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      // Fetch user details
       const { data: details } = await supabase
         .from('user_details')
         .select('*')
         .eq('id', user.id)
         .single();
 
-      // Fetch approved events
       const { data: eventsData } = await supabase
         .from('events')
         .select('*')
         .eq('is_approved', true)
         .order('created_at', { ascending: false });
 
-      // Fetch user registrations
       const { data: regData } = await supabase
         .from('event_registrations')
         .select(`
@@ -85,7 +81,6 @@ export function DashboardUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Update profile
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ full_name: formData.full_name, email: formData.email })
@@ -93,7 +88,6 @@ export function DashboardUser() {
 
       if (profileError) throw profileError;
 
-      // Insert or update user details
       const { error: detailsError } = await supabase
         .from('user_details')
         .upsert({
@@ -109,7 +103,6 @@ export function DashboardUser() {
         phone_number: formData.phone_number
       });
 
-      // Now register for the event
       await registerForEvent(selectedEvent.id);
     } catch (err) {
       alert('Error saving details: ' + err.message);
@@ -121,7 +114,6 @@ export function DashboardUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
-      // Check if already registered
       const { data: existing } = await supabase
         .from('event_registrations')
         .select('*')
@@ -134,24 +126,29 @@ export function DashboardUser() {
         return;
       }
 
-      // Generate unique QR code
       const qrData = JSON.stringify({
         event_id: eventId,
         user_id: user.id,
         timestamp: Date.now()
       });
 
-      // Generate QR code image
       const qrCodeDataUrl = await QRCode.toDataURL(qrData);
 
-      // Insert registration
+      const additionalPayload = {
+        registered_via: 'form',
+        qr_code_image: qrCodeDataUrl
+      };
+      if (additionalDetails) {
+        additionalPayload.notes = additionalDetails;
+      }
+
       const { error } = await supabase
         .from('event_registrations')
         .insert([{
           event_id: eventId,
           user_id: user.id,
           qr_code: qrData,
-          additional_details: additionalDetails ? { notes: additionalDetails } : null
+          additional_details: additionalPayload
         }]);
 
       if (error) throw error;
@@ -174,6 +171,14 @@ export function DashboardUser() {
     }
   }
 
+  function handleDownloadQr(imageDataUrl, filename) {
+    if (!imageDataUrl) return;
+    const link = document.createElement('a');
+    link.href = imageDataUrl;
+    link.download = `${filename}-qr.png`;
+    link.click();
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
     navigate('/auth');
@@ -182,148 +187,111 @@ export function DashboardUser() {
   if (loading) {
     return (
       <div className="container">
-        <div style={{ textAlign: 'center', padding: '40px' }}>Loading...</div>
+        <div style={{ textAlign: 'center', padding: '60px', color: '#a0a0b0' }}>
+          ⏳ Loading your dashboard...
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <h1 style={{ margin: 0 }}>User Dashboard</h1>
+    <div>
+      <div className="sidebar">
+        <Link to="/events" className="nav-item">🎪 Events</Link>
+        <Link to="/dashboard-user" className="nav-item active">👤 Dashboard</Link>
+        <button className="nav-item" onClick={() => setShowChatbot(true)}>💬 Chatbot</button>
+        <button className="nav-item" onClick={signOut}>🚪 Sign Out</button>
+      </div>
+      <div className="container layout-with-sidebar">
+      <div className="header">
+        <div>
+          <h1 style={{ marginBottom: 4 }}>👤 User Dashboard</h1>
+          <p style={{ margin: 0, color: '#a0a0b0', fontSize: 14 }}>Manage your registrations and find events</p>
+        </div>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button
             onClick={() => setShowChatbot(true)}
-            style={{
-              padding: '8px 16px',
-              background: '#10b981',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
+            className="btn btn-success"
           >
-            <span>💬</span>
-            <span>Chatbot</span>
+            💬 Chatbot
           </button>
           <button
             onClick={signOut}
-            style={{
-              padding: '8px 16px',
-              background: '#ef4444',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer'
-            }}
+            className="btn btn-danger"
           >
-            Sign Out
+            🚪 Sign Out
           </button>
         </div>
       </div>
 
       {showRegistrationForm && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: '#fff',
-            padding: '24px',
-            borderRadius: '8px',
-            maxWidth: '500px',
-            width: '90%',
-            maxHeight: '90vh',
-            overflow: 'auto'
-          }}>
-            <h2 style={{ marginTop: 0 }}>Complete Your Profile</h2>
-            <p style={{ color: '#64748b', marginBottom: '20px' }}>
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h2 style={{ marginTop: 0, marginBottom: 8 }}>📝 Complete Your Profile</h2>
+            <p style={{ color: '#a0a0b0', marginBottom: '20px' }}>
               Please provide your details to register for events. This information will be saved for future registrations.
             </p>
             <form onSubmit={handleFirstTimeRegistration}>
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Full Name *</label>
+              <div className="form-group">
+                <label>Full Name *</label>
                 <input
                   type="text"
                   value={formData.full_name}
                   onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                  placeholder="John Doe"
                   required
-                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}
                 />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Registration Number *</label>
+              <div className="form-group">
+                <label>Registration Number *</label>
                 <input
                   type="text"
                   value={formData.registration_number}
                   onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
+                  placeholder="REG123456"
                   required
-                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}
                 />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Email *</label>
+              <div className="form-group">
+                <label>Email *</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  placeholder="you@example.com"
                   required
-                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}
                 />
               </div>
 
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>Phone Number *</label>
+              <div className="form-group">
+                <label>Phone Number *</label>
                 <input
                   type="tel"
                   value={formData.phone_number}
                   onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                  placeholder="+1234567890"
                   required
-                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }}
                 />
               </div>
 
               {selectedEvent && (
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500' }}>
-                    Additional Details for {selectedEvent.title} (Optional)
-                  </label>
+                <div className="form-group">
+                  <label>Additional Details for {selectedEvent.title} (Optional)</label>
                   <textarea
                     value={additionalDetails}
                     onChange={(e) => setAdditionalDetails(e.target.value)}
                     rows="3"
                     placeholder="Any additional information..."
-                    style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontFamily: 'inherit' }}
+                    style={{ resize: 'vertical' }}
                   />
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '10px 20px',
-                    background: '#10b981',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Save & Register
+                <button type="submit" className="btn btn-success" style={{ flex: 1 }}>
+                  ✅ Save & Register
                 </button>
                 <button
                   type="button"
@@ -332,16 +300,10 @@ export function DashboardUser() {
                     setSelectedEvent(null);
                     setAdditionalDetails('');
                   }}
-                  style={{
-                    padding: '10px 20px',
-                    background: '#64748b',
-                    color: '#fff',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer'
-                  }}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
                 >
-                  Cancel
+                  ❌ Cancel
                 </button>
               </div>
             </form>
@@ -350,156 +312,141 @@ export function DashboardUser() {
       )}
 
       {qrCodeUrl && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            background: '#fff',
-            padding: '24px',
-            borderRadius: '8px',
-            textAlign: 'center'
-          }}>
-            <h2 style={{ marginTop: 0 }}>Registration Successful!</h2>
-            <p style={{ marginBottom: '20px' }}>Your QR code for attendance:</p>
-            <img src={qrCodeUrl} alt="QR Code" style={{ maxWidth: '300px', marginBottom: '20px' }} />
-            <button
-              onClick={() => setQrCodeUrl(null)}
-              style={{
-                padding: '10px 20px',
-                background: '#2563eb',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer'
-              }}
-            >
-              Close
-            </button>
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ textAlign: 'center' }}>
+            <h2 style={{ marginTop: 0, marginBottom: 8 }}>✅ Registration Successful!</h2>
+            <p style={{ color: '#a0a0b0', marginBottom: '24px' }}>Your QR code for attendance</p>
+            <div style={{ background: 'rgba(255,255,255,0.05)', padding: 20, borderRadius: 12, marginBottom: 24 }}>
+              <img src={qrCodeUrl} alt="QR Code" style={{ maxWidth: '300px', width: '100%' }} />
+            </div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => handleDownloadQr(qrCodeUrl, 'event')}
+                className="btn btn-primary"
+              >
+                ⬇️ Download QR
+              </button>
+              <button
+                onClick={() => setQrCodeUrl(null)}
+                className="btn btn-secondary"
+              >
+                ✕ Close
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div style={{ marginBottom: '32px' }}>
-        <h2>My Registrations</h2>
+      <div className="panel" style={{ marginBottom: '24px' }}>
+        <h2 style={{ marginBottom: 16 }}>📋 My Registrations</h2>
         {registrations.length === 0 ? (
-          <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', textAlign: 'center' }}>
-            <p>You haven't registered for any events yet.</p>
+          <div className="card" style={{ textAlign: 'center', padding: 60 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>📭</div>
+            <h3 style={{ marginBottom: 8 }}>No Registrations Yet</h3>
+            <p style={{ color: '#a0a0b0', margin: 0 }}>You haven't registered for any events. Check available events below!</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gap: '20px' }}>
-            {registrations.map((reg) => (
-              <div
-                key={reg.id}
-                style={{
-                  background: '#fff',
-                  padding: '24px',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                }}
-              >
-                <h3 style={{ marginTop: 0 }}>{reg.events?.title}</h3>
-                <p style={{ color: '#64748b' }}>{reg.events?.description}</p>
-                <div style={{ marginTop: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <span style={{
-                    padding: '4px 12px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    background: reg.attendance_marked ? '#d1fae5' : '#fef3c7',
-                    color: reg.attendance_marked ? '#065f46' : '#92400e'
-                  }}>
-                    {reg.attendance_marked ? '✓ Attendance Marked' : 'Pending Attendance'}
-                  </span>
-                  {reg.attendance_marked && reg.attendance_marked_at && (
-                    <span style={{ fontSize: '14px', color: '#64748b' }}>
-                      Marked at: {new Date(reg.attendance_marked_at).toLocaleString()}
-                    </span>
-                  )}
+            {registrations.map((reg) => {
+              const posterUrl = reg.events?.poster_url;
+              const qrImage = reg.additional_details?.qr_code_image;
+              return (
+                <div key={reg.id} className="card fade-in">
+                  <div className="reg-item">
+                    {posterUrl && (
+                      <img
+                        src={posterUrl}
+                        alt={reg.events?.title}
+                        className="img-banner"
+                      />
+                    )}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                        <div>
+                          <h3 style={{ marginTop: 0, marginBottom: 4 }}>{reg.events?.title}</h3>
+                          <p style={{ color: '#a0a0b0', margin: 0, fontSize: 14 }}>{reg.events?.description}</p>
+                        </div>
+                        <span className={`badge ${reg.attendance_marked ? 'badge-green' : 'badge-yellow'}`}>
+                          {reg.attendance_marked ? '✓ Attended' : '⏳ Pending'}
+                        </span>
+                      </div>
+
+                      {reg.additional_details?.notes && (
+                        <div style={{ marginBottom: 12, padding: 12, background: 'rgba(59,130,246,0.1)', borderRadius: 8, fontSize: 13 }}>
+                          <strong style={{ color: '#60a5fa' }}>📝 Notes:</strong> <span style={{ color: '#e0e0e0' }}>{reg.additional_details.notes}</span>
+                        </div>
+                      )}
+
+                      {reg.attendance_marked && reg.attendance_marked_at && (
+                        <div style={{ fontSize: 13, color: '#a0a0b0', marginBottom: 12 }}>
+                          ✓ Marked at {new Date(reg.attendance_marked_at).toLocaleString()}
+                        </div>
+                      )}
+
+                      {qrImage && (
+                        <button
+                          onClick={() => handleDownloadQr(qrImage, reg.events?.title || 'event')}
+                          className="btn btn-primary"
+                          style={{ fontSize: 13, padding: '8px 16px' }}
+                        >
+                          ⬇️ Download QR Code
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
-      <div>
-        <h2>Available Events</h2>
+      <div className="panel">
+        <h2 style={{ marginBottom: 16 }}>🎪 Available Events</h2>
         {events.length === 0 ? (
-          <div style={{ background: '#fff', padding: '24px', borderRadius: '8px', textAlign: 'center' }}>
-            <p>No events available at the moment.</p>
+          <div className="card" style={{ textAlign: 'center', padding: 60 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
+            <h3 style={{ marginBottom: 8 }}>No Events Available</h3>
+            <p style={{ color: '#a0a0b0', margin: 0 }}>Check back soon for upcoming events!</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: '20px' }}>
+          <div className="grid-3">
             {events.map((event) => {
               const isRegistered = registrations.some(reg => reg.event_id === event.id);
               return (
-                <div
-                  key={event.id}
-                  style={{
-                    background: '#fff',
-                    padding: '24px',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                    display: 'grid',
-                    gridTemplateColumns: event.poster_url ? '200px 1fr' : '1fr',
-                    gap: '20px'
-                  }}
-                >
-                  {event.poster_url && (
+                <div key={event.id} className="card fade-in" style={{ display: 'flex', flexDirection: 'column' }}>
+                  {event.poster_url ? (
                     <img
                       src={event.poster_url}
                       alt={event.title}
-                      style={{
-                        width: '100%',
-                        height: '200px',
-                        objectFit: 'cover',
-                        borderRadius: '8px'
-                      }}
+                      className="img-banner"
                     />
+                  ) : (
+                    <div className="banner-placeholder">🎪</div>
                   )}
-                  <div>
-                    <h3 style={{ marginTop: 0 }}>{event.title}</h3>
-                    <p style={{ color: '#64748b', marginBottom: '16px' }}>{event.description}</p>
-                    {event.support_contact && (
-                      <p style={{ marginBottom: '16px' }}>
-                        <strong>Contact:</strong> {event.support_contact}
-                      </p>
-                    )}
-                    {isRegistered ? (
-                      <span style={{
-                        padding: '8px 16px',
-                        background: '#d1fae5',
-                        color: '#065f46',
-                        borderRadius: '6px',
-                        display: 'inline-block'
-                      }}>
-                        ✓ Registered
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => handleRegisterClick(event)}
-                        style={{
-                          padding: '10px 20px',
-                          background: '#2563eb',
-                          color: '#fff',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Register Now
-                      </button>
-                    )}
-                  </div>
+
+                  <h3 style={{ marginTop: 0, marginBottom: 8, fontSize: 18, fontWeight: 700 }}>{event.title}</h3>
+                  <p style={{ color: '#a0a0b0', marginBottom: 12, flex: 1, fontSize: 14 }}>{event.description}</p>
+
+                  {event.support_contact && (
+                    <div style={{ marginBottom: 12, padding: '12px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: 8, fontSize: 13 }}>
+                      <strong style={{ color: '#60a5fa' }}>📞 Contact:</strong> <span style={{ color: '#e0e0e0' }}>{event.support_contact}</span>
+                    </div>
+                  )}
+
+                  {isRegistered ? (
+                    <div className="badge badge-green" style={{ display: 'block', textAlign: 'center', marginTop: 'auto' }}>
+                      ✓ Already Registered
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleRegisterClick(event)}
+                      className="btn btn-success btn-block"
+                      style={{ marginTop: 'auto' }}
+                    >
+                      ✨ Register Now
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -511,11 +458,12 @@ export function DashboardUser() {
         <Chatbot
           onClose={() => {
             setShowChatbot(false);
-            fetchData(); // Refresh data after chatbot registration
+            fetchData();
           }}
           events={events}
         />
       )}
+      </div>
     </div>
   );
 }
