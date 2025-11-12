@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import CertificateEditor from './CertificateEditor';
 import CertificatePreview from './CertificatePreview';
 import TemplateUploader from './TemplateUploader';
-import QRCode from 'qrcode';
 
 export function CertificateManager() {
   const [events, setEvents] = useState([]);
@@ -53,9 +52,9 @@ export function CertificateManager() {
     if (selectedEvent) {
       fetchParticipants();
     }
-  }, [selectedEvent]);
+  }, [selectedEvent, fetchParticipants]);
 
-  async function fetchParticipants() {
+  const fetchParticipants = useCallback(async () => {
     if (!selectedEvent) return;
 
     try {
@@ -99,7 +98,7 @@ export function CertificateManager() {
       console.error('Error fetching participants:', err);
       alert('Error fetching participants: ' + err.message);
     }
-  }
+  }, [selectedEvent]);
 
   async function generateCertificates() {
     if (!templateFile || participants.length === 0) {

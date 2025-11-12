@@ -3,14 +3,21 @@ import { Html5Qrcode } from 'html5-qrcode';
 import { supabase } from '../supabaseClient';
 
 export default function QRScanner({ onClose }) {
+  const WEBHOOK_URL = 'https://supasanjay.app.n8n.cloud/webhook/Sheet';
   const [participantInfo, setParticipantInfo] = useState(null);
   const [error, setError] = useState(null);
   const html5QrCodeRef = useRef(null);
+  const startScanningRef = useRef(() => {});
+  const stopScanningRef = useRef(() => {});
 
   useEffect(() => {
-    startScanning();
+    if (typeof startScanningRef.current === 'function') {
+      startScanningRef.current();
+    }
     return () => {
-      stopScanning();
+      if (typeof stopScanningRef.current === 'function') {
+        stopScanningRef.current();
+      }
     };
   }, []);
 
@@ -44,6 +51,21 @@ export default function QRScanner({ onClose }) {
       }
     } catch (err) {
       console.error('Error stopping scanner:', err);
+    }
+  }
+
+  startScanningRef.current = startScanning;
+  stopScanningRef.current = stopScanning;
+
+  async function sendWebhook(payload) {
+    try {
+      await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+    } catch (err) {
+      console.error('Webhook post failed:', err);
     }
   }
 
@@ -87,6 +109,17 @@ export default function QRScanner({ onClose }) {
         profile,
         userDetails: userDetails || {}
       });
+
+      await sendWebhook({
+        action: 'scan',
+        eventId: registration.event_id,
+        eventTitle: registration.events?.title || null,
+        userId: registration.user_id,
+        fullName: profile.full_name || null,
+        registrationNumber: (userDetails && userDetails.registration_number) || null,
+        email: profile.email || null,
+        scannedAt: new Date().toISOString()
+      });
     } catch (err) {
       console.error('Error processing QR code:', err);
       setError('Invalid QR code or registration not found: ' + err.message);
@@ -112,6 +145,22 @@ export default function QRScanner({ onClose }) {
         .eq('id', participantInfo.registration.id);
 
       if (error) throw error;
+
+      try {
+        await sendWebhook({
+          action: 'mark_attendance',
+          registrationId: participantInfo.registration.id,
+          eventId: participantInfo.registration.event_id,
+          userId: participantInfo.registration.user_id,
+          eventTitle: participantInfo.registration.events?.title || null,
+          fullName: participantInfo.profile?.full_name || null,
+          registrationNumber: participantInfo.userDetails?.registration_number || null,
+          email: participantInfo.profile?.email || null,
+          attendanceMarkedAt: new Date().toISOString()
+        });
+      } catch (wErr) {
+        console.error('Attendance webhook failed:', wErr);
+      }
 
       alert('Attendance marked successfully!');
       setParticipantInfo(null);

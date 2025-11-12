@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { supabase } from '../supabaseClient';
 import QRCode from 'qrcode';
 import { generateGeminiResponse } from '../lib/gemini';
@@ -58,17 +58,17 @@ export default function Chatbot({ onClose, events = [] }) {
 
   useEffect(() => {
     fetchUserInfo();
-  }, []);
+  }, [fetchUserInfo]);
 
   useEffect(() => {
     postEventsList();
-  }, []);
+  }, [postEventsList]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  async function fetchUserInfo() {
+  const fetchUserInfo = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -97,13 +97,13 @@ export default function Chatbot({ onClose, events = [] }) {
     } catch (err) {
       console.error('Error fetching user info:', err);
     }
-  }
+  }, []);
 
   function scrollToBottom() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }
 
-  function postEventsList(prefixText) {
+  const postEventsList = useCallback((prefixText) => {
     const eventChips = events.map(e => ({ id: e.id, title: e.title }));
     setMessages(prev => [
       ...prev,
@@ -114,7 +114,7 @@ export default function Chatbot({ onClose, events = [] }) {
         events: eventChips
       }
     ]);
-  }
+  }, [events]);
 
   function handleSelectEvent(eventId, infoOverride) {
     setSelectedEventId(eventId);
