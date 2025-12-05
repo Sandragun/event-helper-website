@@ -1,4 +1,4 @@
-# Event Registration and QR-Based Attendance System
+# Event Registration and QR-Based Attendance
 
 A web-based Event Registration Platform that allows organisers (admins) to manage events and participants (users) to register easily, with QR code–based attendance tracking.
 
